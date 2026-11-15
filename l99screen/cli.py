@@ -7,16 +7,37 @@ import time
 
 from PIL import Image
 
-from . import encode, protocol
+from . import encode, linux_access, protocol
 
 MAX_SAFE_FRAMES = encode.MAX_FRAMES
+UDEV_RULE = linux_access.RULE
 
-UDEV_RULE = """\
-# AULA L99 keyboard screen (USB CDC serial, EEEF:268A): user access, no ModemManager probing
-# Must be installed as 70-aula-l99-screen.rules (below 73, where systemd applies "uaccess").
-SUBSYSTEM=="tty", ATTRS{idVendor}=="eeef", ATTRS{idProduct}=="268a", MODE="0660", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1", SYMLINK+="aula-l99-screen"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="eeef", ATTRS{idProduct}=="268a", ENV{ID_MM_DEVICE_IGNORE}="1"
-"""
+
+def _open_screen(port):
+    """Open the screen; on Linux, offer the one-time permission setup if access is denied."""
+    try:
+        return protocol.Screen(port)
+    except protocol.PortPermissionError as e:
+        if not (linux_access.is_linux() and sys.stdin.isatty()):
+            raise
+        answer = input(f"{e.port} needs a one-time permission setup (asks for your password). "
+                       "Do it now? [Y/n] ").strip().lower()
+        if answer not in ("", "y", "yes"):
+            raise
+        ok, msg = linux_access.install_rule(interactive_terminal=True)
+        print(msg)
+        if not ok or not linux_access.wait_for_access(e.port):
+            raise
+        return protocol.Screen(port)
+
+
+def cmd_setup(args) -> int:
+    if not linux_access.is_linux():
+        print("Nothing to set up on this system.")
+        return 0
+    ok, msg = linux_access.install_rule(interactive_terminal=sys.stdin.isatty())
+    print(msg, file=sys.stdout if ok else sys.stderr)
+    return 0 if ok else 1
 
 
 def _progress(label: str):
@@ -39,7 +60,7 @@ def _deliver(args, base: int, blob: bytes, label: str) -> int:
                 f.write(frame)
         print(f"wrote {len(blob)} bytes of {label} as raw frames to {args.dump} (nothing sent)")
         return 0
-    with protocol.Screen(args.port) as scr:
+    with _open_screen(args.port) as scr:
         print(f"using {scr.port}")
         scr.upload(base, blob, _progress(f"uploading {label}"))
     print("done")
@@ -108,6 +129,10 @@ def main(argv=None) -> int:
 
     sp = sub.add_parser("detect", help="check that the screen device is connected")
     sp.set_defaults(func=cmd_detect)
+
+    sp = sub.add_parser("setup", help="Linux: allow your user to use the screen "
+                        "(one-time, asks for your password)")
+    sp.set_defaults(func=cmd_setup)
 
     sp = sub.add_parser("udev-rule", help="print the Linux udev rule (pipe to sudo tee "
                         "/etc/udev/rules.d/70-aula-l99-screen.rules)")

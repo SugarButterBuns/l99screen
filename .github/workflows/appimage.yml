@@ -34,4 +34,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/*.AppImage 70-aula-l99-screen.rules \
             --title "L99 Screen $GITHUB_REF_NAME" \
-            --notes "Download the AppImage, \`chmod +x\` it and run it. For access without sudo, install the udev rule: \`./L99_Screen-*.AppImage udev-rule | sudo tee /etc/udev/rules.d/70-aula-l99-screen.rules && sudo udevadm control --reload && sudo udevadm trigger\`, then replug the keyboard."
+            --notes "Download the AppImage, \`chmod +x\` it and run it. The first upload sets up Linux permissions for you (one password prompt). To do it by hand instead: \`./L99_Screen-*.AppImage setup\`."

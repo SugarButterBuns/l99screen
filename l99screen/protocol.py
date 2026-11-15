@@ -88,13 +88,13 @@ class ProtocolError(RuntimeError):
     pass
 
 
-PERMISSION_HELP = (
-    "No permission to open {port}. Install the udev rule once, then unplug and replug the "
-    "keyboard:\n\n"
-    "  l99screen udev-rule | sudo tee /etc/udev/rules.d/70-aula-l99-screen.rules\n"
-    "  sudo udevadm control --reload && sudo udevadm trigger\n\n"
-    "(With the AppImage, run ./L99_Screen-*.AppImage udev-rule instead of l99screen udev-rule. "
-    "If an older 99-aula-l99-screen.rules exists, delete it.)")
+class PortPermissionError(PermissionError):
+    """The screen's serial port exists but this user may not open it (Linux)."""
+
+    def __init__(self, port: str):
+        super().__init__(f"No permission to open {port}. Run 'l99screen setup' once "
+                         "(asks for your password) to allow access.")
+        self.port = port
 
 
 def find_port() -> Optional[str]:
@@ -119,7 +119,7 @@ class Screen:
             self.ser = serial.Serial(port, BAUD, timeout=0.05, write_timeout=timeout)
         except serial.SerialException as e:
             if getattr(e, "errno", None) == errno.EACCES or "Permission denied" in str(e):
-                raise PermissionError(PERMISSION_HELP.format(port=port)) from e
+                raise PortPermissionError(port) from e
             raise
         self.ser.dtr = True
         self.ser.rts = True

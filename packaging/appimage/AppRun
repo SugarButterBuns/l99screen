@@ -14,6 +14,6 @@ unset PYTHONHOME PYTHONPATH
 case "${1:-}" in
   --selftest)
     exec "$PY" -c "import tkinterdnd2, l99screen.gui; r = tkinterdnd2.TkinterDnD.Tk(); l99screen.gui.App(r); r.update(); r.destroy(); print('GUI + drag-and-drop OK')" ;;
-  image|gif|detect|gui|udev-rule|-h|--help) exec "$PY" -m l99screen "$@" ;;
+  image|gif|detect|gui|setup|udev-rule|-h|--help) exec "$PY" -m l99screen "$@" ;;
   *) exec "$PY" -m l99screen gui "$@" ;;
 esac

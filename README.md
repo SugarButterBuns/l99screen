@@ -9,18 +9,20 @@ Download `L99_Screen-*-x86_64.AppImage` from Releases, then:
 
 ```bash
 chmod +x L99_Screen-*-x86_64.AppImage
-./L99_Screen-*-x86_64.AppImage udev-rule | sudo tee /etc/udev/rules.d/70-aula-l99-screen.rules
-sudo udevadm control --reload && sudo udevadm trigger
 ./L99_Screen-*-x86_64.AppImage            # GUI
 ./L99_Screen-*-x86_64.AppImage gif a.gif  # command line works too
 ```
+
+**Permissions are handled for you.** Linux doesn't let normal users open the keyboard's serial port
+by default. The first time an upload is refused, the app offers to fix it: your system asks for your
+password once, the app installs `/etc/udev/rules.d/70-aula-l99-screen.rules`, and the upload continues.
+It won't ask again. You can also do it up front with `l99screen setup`, or by hand with
+`l99screen udev-rule | sudo tee /etc/udev/rules.d/70-aula-l99-screen.rules`.
 
 ## Install from source (Linux)
 
 ```bash
 pip install --user ".[dnd]"
-sudo cp 70-aula-l99-screen.rules /etc/udev/rules.d/
-sudo udevadm control --reload && sudo udevadm trigger
 ```
 
 The GUI needs Tk: `sudo apt install python3-tk` (Debian/Ubuntu), `sudo dnf install python3-tkinter`

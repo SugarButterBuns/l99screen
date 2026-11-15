@@ -8,7 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from . import encode, protocol
+from . import encode, linux_access, protocol
 
 try:  # optional drag-and-drop support
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -226,10 +226,36 @@ class App:
                     self.events.put(("status", f"Uploading on {scr.port}…"))
                     scr.upload(base, blob, lambda i, n: self.events.put(("progress", i * 100 / n)))
                 self.events.put(("done", "Uploaded. The keyboard screen should update now."))
+            except protocol.PortPermissionError as e:
+                if linux_access.is_linux():
+                    self.events.put(("need_access", e.port))
+                else:
+                    self.events.put(("failed", str(e)))
             except PermissionError as e:
                 self.events.put(("failed", str(e)))
             except Exception as e:
                 self.events.put(("failed", f"Upload failed: {e}"))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _setup_access(self, port: str):
+        """Ask once, install the udev rule via pkexec, then retry the upload."""
+        self._busy = False
+        if not messagebox.askyesno(
+                "L99 Screen",
+                "Linux needs a one-time permission before this app can use the keyboard's "
+                "screen.\n\nSet it up now? Your system will ask for your password once; "
+                "after that it works without asking."):
+            self.status.set("Upload cancelled: permission not set up.")
+            self.upload_btn.config(state="normal")
+            return
+        self.status.set("Waiting for your password…")
+
+        def work():
+            ok, msg = linux_access.install_rule()
+            if ok and not linux_access.wait_for_access(port):
+                ok, msg = False, ("Permission was installed but the port is still locked. "
+                                  "Unplug and replug the keyboard, then upload again.")
+            self.events.put(("access_done", ok, msg))
         threading.Thread(target=work, daemon=True).start()
 
     # ------------------------------------------------------- event pump
@@ -244,6 +270,16 @@ class App:
                     self.progress["value"] = ev[1]
                 elif kind == "status":
                     self.status.set(ev[1])
+                elif kind == "need_access":
+                    self._setup_access(ev[1])
+                elif kind == "access_done":
+                    if ev[1]:
+                        self.status.set(ev[2] + " Uploading…")
+                        self.upload()
+                    else:
+                        self.status.set(ev[2])
+                        self.upload_btn.config(state="normal")
+                        messagebox.showerror("L99 Screen", ev[2])
                 elif kind in ("done", "failed", "error"):
                     self._busy = False
                     self.status.set(ev[1])
