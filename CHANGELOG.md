@@ -2,6 +2,18 @@
 
 All notable changes to L99 Screen. Each version below is a GitHub release with an AppImage.
 
+## [1.0-2] - 2026-11-15
+
+### Added
+- **Windows version:** `L99_Screen-1.0-2-windows.exe`, a single file with nothing to install and no
+  need for AULA's software. It's the same app as on Linux, with drag-and-drop and the app icon. It
+  isn't code-signed, so SmartScreen may warn the first time: click **More info → Run anyway**.
+- Every release now includes both the Linux AppImage and the Windows exe.
+
+### Fixed
+- Text is sharp on Windows displays scaled to 125% or 150%. It used to be blurry because the
+  window was being stretched.
+
 ## [1.0-1] - 2026-11-15
 
 First stable release.
@@ -52,6 +64,7 @@ First release.
 - Graphical app with drag-and-drop and a live preview, and an `l99screen` command-line tool.
 - Self-contained Linux AppImage.
 
+[1.0-2]: https://github.com/SugarButterBuns/l99screen/releases/tag/v1.0-2
 [1.0-1]: https://github.com/SugarButterBuns/l99screen/releases/tag/v1.0-1
 [0.1.1]: https://github.com/SugarButterBuns/l99screen/releases/tag/v0.1.1
 [0.1.0]: https://github.com/SugarButterBuns/l99screen/releases/tag/v0.1.0
