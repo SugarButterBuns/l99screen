@@ -39,6 +39,8 @@ BEZEL = "#0b0c10"
 
 PAD = 16          # outer padding
 BEZEL_PAD = 14    # mock screen bezel around the 320x480 preview
+RIGHT_W = 420     # fixed width of the controls column; the preview takes the rest
+CAPTION_H = 28    # space under the mock screen for its caption
 
 
 def _rounded_rect(cv: tk.Canvas, x0, y0, x1, y1, r, **kw):
@@ -52,15 +54,21 @@ class App:
         self.root = root
         root.title("L99 Screen")
         root.configure(bg=BG)
-        root.resizable(False, False)
+        root.resizable(True, True)
 
         self.path: str | None = None
         self.animated = False
-        self.frames: list[Image.Image] = []
+        self.file_meta = ""            # e.g. "1920 × 1080 · 2.4 MB"
+        self.file_type = ""            # e.g. "JPG"
+        self.frames: list[Image.Image] = []   # exact 320x480 frames that get uploaded
         self.delays: list[int] = []
-        self._tk_frames: list[ImageTk.PhotoImage] = []
+        self._tk_frames: list[ImageTk.PhotoImage] = []  # frames scaled for the preview
         self._img_item = None
         self._anim_job = None
+        self._anim_i = 0
+        self._resize_job = None
+        self._hover = False
+        self._disp_size = (0, 0)
         self._render_token = 0
         self._busy = False
         self._connected_port: str | None = None
@@ -123,7 +131,7 @@ class App:
         s.map("Accent.TButton",
               background=[("disabled", ACCENT_LO), ("pressed", "#e8662a"), ("active", ACCENT_HI)],
               foreground=[("disabled", "#c9a993")])
-        s.configure("Ghost.TButton", background=FIELD, foreground=TEXT, padding=(12, 7),
+        s.configure("Ghost.TButton", background=FIELD, foreground=TEXT, padding=(8, 6),
                     borderwidth=0, relief="flat")
         s.map("Ghost.TButton", background=[("pressed", "#3a3e50"), ("active", "#323646")])
         s.configure("Link.TButton", background=CARD, foreground=MUTED, padding=(0, 2),
@@ -147,8 +155,13 @@ class App:
 
     # ------------------------------------------------------------------- layout
     def _build(self):
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
         outer = ttk.Frame(self.root, padding=PAD)
-        outer.grid(row=0, column=0)
+        outer.grid(row=0, column=0, sticky="nsew")
+        outer.rowconfigure(1, weight=1)     # the preview row takes the extra height
+        outer.columnconfigure(0, weight=1)  # ...and the preview column the extra width
+        outer.columnconfigure(1, minsize=RIGHT_W)
 
         # header: title + connection pill
         head = ttk.Frame(outer)
@@ -163,34 +176,44 @@ class App:
         self.pill.bind("<Button-1>", lambda e: self.refresh_ports())
 
         # left: mock screen
-        sw, sh = encode.W + 2 * BEZEL_PAD, encode.H + 2 * BEZEL_PAD
+        sw, sh = encode.W + 2 * BEZEL_PAD + 4, encode.H + 2 * BEZEL_PAD + 4 + CAPTION_H
         left = ttk.Frame(outer)
-        left.grid(row=1, column=0, sticky="n", padx=(0, PAD))
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, PAD))
+        left.rowconfigure(0, weight=1)
+        left.columnconfigure(0, weight=1)
         self.canvas = tk.Canvas(left, width=sw, height=sh, bg=BG, highlightthickness=0,
                                 cursor="hand2")
-        self.canvas.grid(row=0, column=0)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
         self.canvas.bind("<Button-1>", lambda e: self.open_dialog())
-        ttk.Label(left, text="Preview: exactly what the keyboard will show",
-                  style="Faint.TLabel").grid(row=1, column=0, pady=(8, 0))
+        self.canvas.bind("<Configure>", lambda e: self._schedule_redraw())
         self._draw_empty()
 
         # right: controls
         right = ttk.Frame(outer, width=330)
-        right.grid(row=1, column=1, sticky="nsew")
+        right.grid(row=1, column=1, sticky="ns")
         right.columnconfigure(0, weight=1)
 
-        # file card
+        # file card: [TYPE] name ............ [Browse…]
         card = self._card(right, 0)
         top = ttk.Frame(card, style="Card.TFrame")
         top.grid(row=0, column=0, sticky="ew")
-        top.columnconfigure(0, weight=1)
-        self.name_lbl = ttk.Label(top, text="No file chosen", style="Name.Card.TLabel",
-                                  width=24)
-        self.name_lbl.grid(row=0, column=0, sticky="w")
-        ttk.Button(top, text="Browse…", style="Ghost.TButton",
-                   command=self.open_dialog).grid(row=0, column=1, sticky="e")
-        self.info = ttk.Label(card, text="JPG, PNG, GIF, WebP…", style="Muted.Card.TLabel")
-        self.info.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        top.columnconfigure(1, weight=1)
+        self.badge = tk.Label(top, text="", bg=ACCENT, fg="#ffffff", font=self.f_label,
+                              padx=6, pady=1)
+        # width=1: the name never pushes the layout wider; _fit_name() shortens it to fit
+        self.name_lbl = ttk.Label(top, text="No file chosen", style="Name.Card.TLabel", width=1)
+        self.name_lbl.grid(row=0, column=1, sticky="ew")
+        self._name_top = top
+        top.bind("<Configure>", lambda e: self._fit_name())
+        top.grid(columnspan=2)
+        self.meta = ttk.Label(card, text="JPG · PNG · GIF · WebP · BMP", style="Muted.Card.TLabel",
+                              wraplength=RIGHT_W - 145)
+        self.meta.grid(row=1, column=0, sticky="w", pady=(8, 0))
+        self.info = ttk.Label(card, text="", style="Muted.Card.TLabel", wraplength=RIGHT_W - 145)
+        self.info.grid(row=2, column=0, sticky="w", pady=(2, 0))
+        self.browse_btn = ttk.Button(card, text="Browse…", style="Ghost.TButton",
+                                     command=self.open_dialog)
+        self.browse_btn.grid(row=1, column=1, rowspan=2, sticky="e", pady=(8, 0))
 
         # options card
         card = self._card(right, 1)
@@ -203,7 +226,8 @@ class App:
         self._section(card, 4, "SEND TO")
         self.target_seg = self._segmented(card, 5, self.target, [
             ("auto", "Automatic"), ("still", "Picture"), ("anim", "Animation")])
-        self.target_hint = ttk.Label(card, text="", style="Muted.Card.TLabel")
+        self.target_hint = ttk.Label(card, text="", style="Muted.Card.TLabel",
+                                     wraplength=RIGHT_W - 40)
         self.target_hint.grid(row=6, column=0, sticky="w", pady=(6, 0))
 
         # advanced card (collapsible)
@@ -242,7 +266,7 @@ class App:
         self.status_dot = tk.Canvas(srow, width=10, height=10, bg=BG, highlightthickness=0)
         self.status_dot.grid(row=0, column=0, padx=(0, 8), pady=(4, 0), sticky="n")
         self.status_lbl = ttk.Label(srow, textvariable=self.status, style="Muted.TLabel",
-                                    wraplength=300, justify="left")
+                                    wraplength=RIGHT_W - 30, justify="left")
         self.status_lbl.grid(row=0, column=1, sticky="w")
         self._set_status_color(FAINT)
 
@@ -252,6 +276,14 @@ class App:
 
         self.root.bind("<Control-o>", lambda e: self.open_dialog())
         self.root.bind("<Control-u>", lambda e: self.upload())
+
+        # Open at the natural size (preview at 1:1), but allow any size down to what the
+        # controls need: the preview scales to whatever space is left.
+        self.root.update_idletasks()
+        w0, h0 = self.root.winfo_reqwidth(), self.root.winfo_reqheight()
+        self.canvas.config(width=180, height=260)
+        self._update_minsize()
+        self.root.geometry(f"{w0}x{h0}")
 
         if TkinterDnD:
             for w in (self.canvas, self.root):
@@ -293,25 +325,82 @@ class App:
         else:
             self.adv.grid_remove()
             self.adv_btn.config(text="▸  Advanced")
+        self._update_minsize(grow=True)
+
+    def _update_minsize(self, grow=False):
+        """Minimum window size = whatever the controls need, with a small preview."""
+        self.root.update_idletasks()
+        mw, mh = self.root.winfo_reqwidth(), self.root.winfo_reqheight()
+        self.root.minsize(mw, mh)
+        if grow and self.root.winfo_height() < mh:
+            self.root.geometry(f"{max(self.root.winfo_width(), mw)}x{mh}")
+
+    # ------------------------------------------------------------ file name
+    def _fit_name(self):
+        """Show as much of the file name as fits, always keeping the extension visible."""
+        if not self.path:
+            return
+        top = self._name_top
+        avail = top.winfo_width() - 4
+        if self.badge.winfo_ismapped():
+            avail -= self.badge.winfo_width() + 8
+        self.name_lbl.config(text=self._elide(os.path.basename(self.path), avail))
+
+    def _elide(self, name: str, avail: int) -> str:
+        f = tkfont.Font(font=self.f_name)
+        if avail <= 0 or f.measure(name) <= avail:
+            return name
+        stem, ext = os.path.splitext(name)
+        tail = stem[-4:] + ext
+        for n in range(len(stem) - 4, 0, -1):
+            cand = stem[:n] + "…" + tail
+            if f.measure(cand) <= avail:
+                return cand
+        return "…" + ext if f.measure("…" + ext) <= avail else ext
 
     # ------------------------------------------------------------ screen canvas
-    def _screen_frame(self, outline=BORDER):
+    def _geom(self):
+        """Where the mock screen sits in the canvas at its current size.
+
+        Returns (bx0, by0, bx1, by1, ix, iy, iw, ih): bezel box, then image origin and size.
+        The image keeps the screen's 320:480 shape and fills as much space as there is.
+        """
+        cw = max(self.canvas.winfo_width(), 2)
+        ch = max(self.canvas.winfo_height(), 2) - CAPTION_H
+        s = min((cw - 2 * BEZEL_PAD - 4) / encode.W, (ch - 2 * BEZEL_PAD - 4) / encode.H)
+        s = max(s, 0.25)
+        iw, ih = int(encode.W * s), int(encode.H * s)
+        bw, bh = iw + 2 * BEZEL_PAD, ih + 2 * BEZEL_PAD
+        bx0, by0 = (cw - bw) // 2, max(0, (ch - bh) // 2)
+        return bx0, by0, bx0 + bw, by0 + bh, bx0 + BEZEL_PAD, by0 + BEZEL_PAD, iw, ih
+
+    def _screen_frame(self):
         cv = self.canvas
         cv.delete("frame")
-        w, h = int(cv["width"]), int(cv["height"])
-        _rounded_rect(cv, 1, 1, w - 2, h - 2, 22, fill=BEZEL, outline=outline, width=2,
-                      tags="frame")
+        bx0, by0, bx1, by1, *_ = self._geom()
+        _rounded_rect(cv, bx0 + 1, by0 + 1, bx1 - 1, by1 - 1, 22, fill=BEZEL,
+                      outline=ACCENT if self._hover else BORDER, width=2, tags="frame")
         cv.tag_lower("frame")
+        scale = (bx1 - bx0 - 2 * BEZEL_PAD) / encode.W
+        caption = "Exactly what the keyboard will show"
+        if self.frames and abs(scale - 1) > 0.02:
+            caption = f"Preview at {scale:.0%} · uploads at 320 × 480"
+        if tkfont.Font(font=self.f_small).measure(caption) > self.canvas.winfo_width() - 8:
+            caption = "Preview"
+        cv.create_text((bx0 + bx1) // 2, by1 + CAPTION_H // 2 + 2, text=caption, fill=FAINT,
+                       font=self.f_small, tags="frame")
 
-    def _draw_empty(self, hover=False):
+    def _draw_empty(self):
         cv = self.canvas
         cv.delete("all")
         self._img_item = None
-        self._screen_frame(ACCENT if hover else BORDER)
-        x0, y0 = BEZEL_PAD, BEZEL_PAD
-        x1, y1 = x0 + encode.W, y0 + encode.H
-        col = ACCENT if hover else "#3a3d4c"
-        cv.create_rectangle(x0 + 18, y0 + 18, x1 - 18, y1 - 18, outline=col, dash=(6, 5), width=2)
+        self._screen_frame()
+        _, _, _, _, x0, y0, iw, ih = self._geom()
+        x1, y1 = x0 + iw, y0 + ih
+        col = ACCENT if self._hover else "#3a3d4c"
+        inset = max(8, min(18, iw // 16))
+        cv.create_rectangle(x0 + inset, y0 + inset, x1 - inset, y1 - inset, outline=col,
+                            dash=(6, 5), width=2)
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2 - 30
         # simple "picture" icon
         cv.create_rectangle(cx - 34, cy - 26, cx + 34, cy + 26, outline=col, width=3)
@@ -319,16 +408,45 @@ class App:
         cv.create_line(cx - 30, cy + 22, cx - 8, cy - 2, cx + 6, cy + 12, cx + 14, cy + 4,
                        cx + 30, cy + 22, fill=col, width=3, joinstyle="round")
         cv.create_text(cx, cy + 62, text="Drop a picture or GIF" if TkinterDnD else
-                       "Click to choose a picture or GIF", fill=TEXT, font=self.f_hint_big)
-        cv.create_text(cx, cy + 88, text="or click to browse" if TkinterDnD else
+                       "Click to choose a picture or GIF", fill=TEXT, font=self.f_hint_big,
+                       width=max(iw - 2 * inset - 8, 60), justify="center")
+        cv.create_text(cx, cy + 92, text="or click to browse" if TkinterDnD else
                        "JPG · PNG · GIF · WebP", fill=MUTED, font=self.f_body)
-        cv.create_text(cx, y1 - 44, text="320 × 480", fill=FAINT, font=self.f_small)
+        if ih > 300:
+            cv.create_text(cx, y1 - inset - 26, text="320 × 480", fill=FAINT, font=self.f_small)
+
+    def _schedule_redraw(self):
+        if self._resize_job:
+            self.root.after_cancel(self._resize_job)
+        self._resize_job = self.root.after(60, self._redraw)
+
+    def _redraw(self):
+        """Redraw the mock screen at the canvas's current size (after resize, load, hover)."""
+        self._resize_job = None
+        if not self.frames:
+            self._draw_empty()
+            return
+        *_, ix, iy, iw, ih = self._geom()
+        if (iw, ih) != self._disp_size:
+            if (iw, ih) == (encode.W, encode.H):
+                scaled = self.frames
+            else:
+                rs = Image.LANCZOS if iw < encode.W else Image.BILINEAR
+                scaled = [f.resize((iw, ih), rs) for f in self.frames]
+            self._tk_frames = [ImageTk.PhotoImage(f) for f in scaled]
+            self._disp_size = (iw, ih)
+        cv = self.canvas
+        cv.delete("all")
+        self._screen_frame()
+        i = self._anim_i % len(self._tk_frames)
+        self._img_item = cv.create_image(ix, iy, anchor="nw", image=self._tk_frames[i])
 
     def _drop_hover(self, on: bool):
+        self._hover = on
         if self.frames:
-            self._screen_frame(ACCENT if on else BORDER)
+            self._screen_frame()
         else:
-            self._draw_empty(hover=on)
+            self._draw_empty()
 
     def _pill(self, text, color):
         cv = self.pill
@@ -393,13 +511,27 @@ class App:
     def load(self, path: str):
         try:
             with Image.open(path) as im:
-                self.animated = getattr(im, "n_frames", 1) > 1
+                n = getattr(im, "n_frames", 1)
+                fmt = (im.format or "").upper()
+                size = im.size
         except Exception as e:
             messagebox.showerror("L99 Screen", f"Can't open this file:\n{e}")
             return
         self.path = path
-        name = os.path.basename(path)
-        self.name_lbl.config(text=name if len(name) <= 28 else name[:25] + "…")
+        self.animated = n > 1
+        ext = os.path.splitext(path)[1].lstrip(".").upper()
+        self.file_type = {"JPEG": "JPG", "MPO": "JPG"}.get(fmt, fmt) or ext or "?"
+        if fmt == "PNG" and self.animated:
+            self.file_type = "APNG"
+        nbytes = os.path.getsize(path)
+        human = (f"{nbytes / 1048576:.1f} MB" if nbytes >= 1048576
+                 else f"{max(1, round(nbytes / 1024))} KB")
+        self.file_meta = f"{size[0]} × {size[1]}  ·  {human}"
+        self.badge.config(text=self.file_type)
+        self.badge.grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.meta.config(text=self.file_meta)
+        self.root.update_idletasks()
+        self._fit_name()
         self.rerender()
 
     def _as_animation(self) -> bool:
@@ -433,23 +565,20 @@ class App:
 
     def _show(self, frames, delays, anim):
         self.frames, self.delays = frames, delays
-        self._tk_frames = [ImageTk.PhotoImage(f) for f in frames]
-        cv = self.canvas
-        cv.delete("all")
-        self._screen_frame()
-        self._img_item = cv.create_image(BEZEL_PAD, BEZEL_PAD, anchor="nw",
-                                         image=self._tk_frames[0])
         if self._anim_job:
             self.root.after_cancel(self._anim_job)
             self._anim_job = None
+        self._anim_i = 0
+        self._disp_size = (0, 0)   # force re-scaling for the new frames
+        self._redraw()
         if anim and len(frames) > 1:
-            self.info.config(text=f"Animation  ·  {len(frames)} frames  ·  "
-                                  f"{sum(delays) / 1000:.1f}s loop")
+            self.info.config(text=f"→ Animation · {len(frames)} frames · "
+                                  f"{sum(delays) / 1000:.1f} s")
             self.target_hint.config(text="Goes to the animation slot. Your picture is kept.")
             self._animate(0)
         else:
-            src = " (first frame of the GIF)" if self.animated else ""
-            self.info.config(text=f"Picture  ·  320 × 480{src}")
+            src = " (first frame)" if self.animated else ""
+            self.info.config(text=f"→ Picture · 320 × 480{src}")
             self.target_hint.config(text="Goes to the picture slot. Your animation is kept.")
         if not self._busy:
             self.upload_btn.config(state="normal")
@@ -457,9 +586,13 @@ class App:
             self._say("Ready to upload.", OK if self._connected_port else WARN)
 
     def _animate(self, i):
+        if not self._tk_frames or self._img_item is None:
+            return
+        i %= len(self._tk_frames)
+        self._anim_i = i
         self.canvas.itemconfig(self._img_item, image=self._tk_frames[i])
-        nxt = (i + 1) % len(self._tk_frames)
-        self._anim_job = self.root.after(max(20, self.delays[i]), self._animate, nxt)
+        self._anim_job = self.root.after(max(20, self.delays[i % len(self.delays)]),
+                                         self._animate, i + 1)
 
     def upload(self):
         if not self.frames or self._busy:
@@ -480,7 +613,7 @@ class App:
                 else:
                     base, blob = protocol.STILL_ADDR, encode.encode_still(frames[0])
                 with protocol.Screen(port) as scr:
-                    self.events.put(("status", f"Uploading to the keyboard…"))
+                    self.events.put(("status", "Uploading to the keyboard…"))
                     scr.upload(base, blob, lambda i, n: self.events.put(("progress", i * 100 / n)))
                 self.events.put(("done", "Done! Your keyboard screen is updated."))
             except protocol.PortPermissionError as e:
