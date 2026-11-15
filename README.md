@@ -83,6 +83,31 @@ See `l99screen/protocol.py` and `l99screen/encode.py` for field-level detail.
   each 2 KiB write is acknowledged with `OK`.
 - ModemManager can grab new `/dev/ttyACM*` devices. The udev rule tells it to ignore this one.
 
+## Privacy
+
+L99 Screen is fully local and works offline. It has no network code at all.
+
+**What it does:**
+- Reads the picture or GIF you choose.
+- Sends it to the keyboard over USB, using the keyboard screen's serial port.
+- Lists USB serial ports every 2 seconds while it's open, to show whether the keyboard is connected.
+- On Linux only, and only if you agree, installs one file for access permission:
+  `/etc/udev/rules.d/70-aula-l99-screen.rules`. This is the one time it asks for your password.
+
+**What it doesn't do:**
+- No internet connections, update checks, crash reports, telemetry or usage stats.
+- No accounts or sign-in.
+- No settings files, logs or history. Closing the app leaves nothing behind.
+- No reading of any file other than the one you pick.
+- It doesn't need or contact AULA's software.
+
+It's built on open-source libraries that work offline: Pillow (images), pyserial (USB serial) and
+Tk with tkinterdnd2 (window and drag-and-drop). The Windows exe and Linux AppImage bundle them with
+Python. Downloads happen only when GitHub Actions builds a release, never when the app runs.
+
+To check for yourself, read the source in `l99screen/`, or block the app in your firewall or turn
+off your network: it works the same.
+
 ## License
 
 [MIT](LICENSE). This is an independent project, not affiliated with or endorsed by AULA. "AULA"
