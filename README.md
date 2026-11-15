@@ -23,6 +23,13 @@ password once, the app installs `/etc/udev/rules.d/70-aula-l99-screen.rules`, an
 It won't ask again. You can also do it up front with `l99screen setup`, or by hand with
 `l99screen udev-rule | sudo tee /etc/udev/rules.d/70-aula-l99-screen.rules`.
 
+## Windows
+
+Download `L99_Screen-*-windows.exe` from Releases and run it. It's a single file with nothing
+to install, and it doesn't need AULA's software. The exe isn't code-signed, so SmartScreen may warn
+the first time: click **More info → Run anyway**. To build it yourself:
+`powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1`.
+
 ## Install from source (Linux)
 
 ```bash

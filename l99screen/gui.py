@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -559,7 +560,19 @@ class App:
 
 
 def main(argv=None) -> int:
+    if os.name == "nt":  # sharp text on scaled Windows displays instead of bitmap-stretched
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
     root = TkinterDnD.Tk() if TkinterDnD else tk.Tk()
+    bundle = getattr(sys, "_MEIPASS", None)  # set inside the Windows .exe build
+    if bundle and os.path.exists(os.path.join(bundle, "l99screen.ico")):
+        try:
+            root.iconbitmap(default=os.path.join(bundle, "l99screen.ico"))
+        except tk.TclError:
+            pass
     app = App(root)
     if argv:
         app.load(argv[0])
@@ -568,5 +581,4 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    import sys
     sys.exit(main(sys.argv[1:]))

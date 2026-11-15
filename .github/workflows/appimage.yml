@@ -1,5 +1,7 @@
-name: AppImage
+name: Release
 
+# Builds the Linux AppImage and the Windows .exe. A pushed v* tag also publishes a GitHub
+# release with both files, using that version's section of CHANGELOG.md as the notes.
 on:
   push:
     tags: ["v*"]
@@ -9,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  linux:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -24,17 +26,64 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: L99_Screen-AppImage
+          name: linux
           path: dist/*.AppImage
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build .exe
+        shell: pwsh
+        run: ./packaging/windows/build.ps1
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          python -m pip install --quiet .
+          python -m l99screen --help | Out-Null
+          python -c "import tkinterdnd2, l99screen.gui; r = tkinterdnd2.TkinterDnD.Tk(); l99screen.gui.App(r); r.update(); r.destroy(); print('GUI + drag-and-drop OK')"
+          $exe = Get-Item dist/*.exe
+          if ($exe.Length -lt 5MB) { throw "exe looks too small: $($exe.Length)" }
+          "built $($exe.Name) ($([math]::Round($exe.Length / 1MB, 1)) MB)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Release notes = this version's section of CHANGELOG.md, plus install steps.
           ver="${GITHUB_REF_NAME#v}"
           awk -v h="## [$ver]" 'index($0, h) == 1 {f = 1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md
-          printf '\n### Install\n\nDownload the AppImage, `chmod +x` it and run it. The first upload sets up Linux permissions for you (one password prompt). See [CHANGELOG.md](CHANGELOG.md) for all versions.\n' >> notes.md
-          gh release create "$GITHUB_REF_NAME" dist/*.AppImage 70-aula-l99-screen.rules \
+          cat >> notes.md <<'EOF'
+
+          ### Install
+
+          - **Linux:** download the `.AppImage`, `chmod +x` it and run it. The first upload sets up Linux permissions for you (one password prompt).
+          - **Windows:** download the `.exe` and run it. Nothing to install. It isn't code-signed, so Windows SmartScreen may warn the first time: click **More info → Run anyway**.
+
+          See [CHANGELOG.md](CHANGELOG.md) for all versions.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/*.AppImage dist/*.exe 70-aula-l99-screen.rules \
             --title "L99 Screen $ver" --notes-file notes.md
