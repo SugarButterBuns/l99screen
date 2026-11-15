@@ -1,0 +1,7 @@
+# USB captures and anything decoded from them hold your own uploads: never commit
+captures/
+__pycache__/
+*.egg-info/
+build/
+dist/
+*.AppImage

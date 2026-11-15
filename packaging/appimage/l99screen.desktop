@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=L99 Screen
+Comment=Set the picture or GIF on the AULA L99 keyboard screen
+Exec=l99screen
+Icon=l99screen
+Categories=Utility;
+Terminal=false

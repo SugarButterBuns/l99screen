@@ -1,0 +1,37 @@
+name: AppImage
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y jq xvfb file
+
+      - name: Build AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash packaging/appimage/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: L99_Screen-AppImage
+          path: dist/*.AppImage
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.AppImage 99-aula-l99-screen.rules \
+            --title "L99 Screen $GITHUB_REF_NAME" \
+            --notes "Download the AppImage, \`chmod +x\` it and run it. For access without sudo, install the udev rule: \`./L99_Screen-*.AppImage udev-rule | sudo tee /etc/udev/rules.d/99-aula-l99-screen.rules && sudo udevadm control --reload && sudo udevadm trigger\`, then replug the keyboard."

@@ -1,0 +1,6 @@
+# AULA L99 keyboard screen (USB CDC serial, EEEF:268A)
+# - lets logged-in users open it without sudo
+# - stops ModemManager from probing it with AT commands
+# - adds a stable name: /dev/aula-l99-screen
+SUBSYSTEM=="tty", ATTRS{idVendor}=="eeef", ATTRS{idProduct}=="268a", MODE="0660", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1", SYMLINK+="aula-l99-screen"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="eeef", ATTRS{idProduct}=="268a", ENV{ID_MM_DEVICE_IGNORE}="1"

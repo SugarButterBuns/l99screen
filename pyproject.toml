@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "l99screen"
+version = "0.1.0"
+description = "Set the picture or GIF on the AULA L99 keyboard screen (Linux/Windows)"
+requires-python = ">=3.9"
+dependencies = ["pyserial>=3.5", "Pillow>=9.1"]
+
+[project.optional-dependencies]
+dnd = ["tkinterdnd2>=0.4"]
+
+[project.scripts]
+l99screen = "l99screen.cli:main"
+
+[project.gui-scripts]
+l99screen-gui = "l99screen.gui:main"
+
+[tool.setuptools]
+packages = ["l99screen"]
