@@ -82,3 +82,8 @@ See `l99screen/protocol.py` and `l99screen/encode.py` for field-level detail.
 - The `0x66` checksum value returned by the keyboard isn't verified yet (algorithm unknown), but
   each 2 KiB write is acknowledged with `OK`.
 - ModemManager can grab new `/dev/ttyACM*` devices. The udev rule tells it to ignore this one.
+
+## License
+
+[MIT](LICENSE). This is an independent project, not affiliated with or endorsed by AULA. "AULA"
+and "L99" are used only to name the hardware it works with.
