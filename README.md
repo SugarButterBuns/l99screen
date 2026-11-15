@@ -3,6 +3,10 @@
 Set the picture or GIF on the **AULA L99** keyboard's 320×480 screen from Linux (also works on Windows).
 Unofficial; protocol reverse-engineered from USB captures of AULA's Windows software.
 
+![L99 Screen app](docs/screenshot.png)
+
+What's new: see [CHANGELOG.md](CHANGELOG.md).
+
 ## AppImage (easiest)
 
 Download `L99_Screen-*-x86_64.AppImage` from Releases, then:

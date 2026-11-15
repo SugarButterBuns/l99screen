@@ -32,6 +32,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Release notes = this version's section of CHANGELOG.md, plus install steps.
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v h="## [$ver]" 'index($0, h) == 1 {f = 1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md
+          printf '\n### Install\n\nDownload the AppImage, `chmod +x` it and run it. The first upload sets up Linux permissions for you (one password prompt). See [CHANGELOG.md](CHANGELOG.md) for all versions.\n' >> notes.md
           gh release create "$GITHUB_REF_NAME" dist/*.AppImage 70-aula-l99-screen.rules \
-            --title "L99 Screen $GITHUB_REF_NAME" \
-            --notes "Download the AppImage, \`chmod +x\` it and run it. The first upload sets up Linux permissions for you (one password prompt). To do it by hand instead: \`./L99_Screen-*.AppImage setup\`."
+            --title "L99 Screen $ver" --notes-file notes.md
