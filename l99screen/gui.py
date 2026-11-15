@@ -227,8 +227,7 @@ class App:
                     scr.upload(base, blob, lambda i, n: self.events.put(("progress", i * 100 / n)))
                 self.events.put(("done", "Uploaded. The keyboard screen should update now."))
             except PermissionError as e:
-                self.events.put(("failed", f"No permission to open the port ({e}). "
-                                           "On Linux install the udev rule from the README."))
+                self.events.put(("failed", str(e)))
             except Exception as e:
                 self.events.put(("failed", f"Upload failed: {e}"))
         threading.Thread(target=work, daemon=True).start()

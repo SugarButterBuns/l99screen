@@ -13,6 +13,7 @@ MAX_SAFE_FRAMES = encode.MAX_FRAMES
 
 UDEV_RULE = """\
 # AULA L99 keyboard screen (USB CDC serial, EEEF:268A): user access, no ModemManager probing
+# Must be installed as 70-aula-l99-screen.rules (below 73, where systemd applies "uaccess").
 SUBSYSTEM=="tty", ATTRS{idVendor}=="eeef", ATTRS{idProduct}=="268a", MODE="0660", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1", SYMLINK+="aula-l99-screen"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="eeef", ATTRS{idProduct}=="268a", ENV{ID_MM_DEVICE_IGNORE}="1"
 """
@@ -109,7 +110,7 @@ def main(argv=None) -> int:
     sp.set_defaults(func=cmd_detect)
 
     sp = sub.add_parser("udev-rule", help="print the Linux udev rule (pipe to sudo tee "
-                        "/etc/udev/rules.d/99-aula-l99-screen.rules)")
+                        "/etc/udev/rules.d/70-aula-l99-screen.rules)")
     sp.set_defaults(func=lambda a: print(UDEV_RULE, end="") or 0)
 
     sp = sub.add_parser("gui", help="open the graphical uploader")
@@ -124,8 +125,7 @@ def main(argv=None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     except PermissionError as e:
-        print(f"error: {e}\nOn Linux, install the udev rule (see README) or run with sudo.",
-              file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         return 1
 
 

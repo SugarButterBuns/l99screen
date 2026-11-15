@@ -17,6 +17,7 @@ Commands seen in captures of AULA's Windows software:
 """
 from __future__ import annotations
 
+import errno
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterator, Optional
@@ -87,6 +88,15 @@ class ProtocolError(RuntimeError):
     pass
 
 
+PERMISSION_HELP = (
+    "No permission to open {port}. Install the udev rule once, then unplug and replug the "
+    "keyboard:\n\n"
+    "  l99screen udev-rule | sudo tee /etc/udev/rules.d/70-aula-l99-screen.rules\n"
+    "  sudo udevadm control --reload && sudo udevadm trigger\n\n"
+    "(With the AppImage, run ./L99_Screen-*.AppImage udev-rule instead of l99screen udev-rule. "
+    "If an older 99-aula-l99-screen.rules exists, delete it.)")
+
+
 def find_port() -> Optional[str]:
     from serial.tools import list_ports
     for p in list_ports.comports():
@@ -105,7 +115,12 @@ class Screen:
                 "by USB cable (not the 2.4 GHz dongle or Bluetooth)?")
         self.port = port
         self.timeout = timeout
-        self.ser = serial.Serial(port, BAUD, timeout=0.05, write_timeout=timeout)
+        try:
+            self.ser = serial.Serial(port, BAUD, timeout=0.05, write_timeout=timeout)
+        except serial.SerialException as e:
+            if getattr(e, "errno", None) == errno.EACCES or "Permission denied" in str(e):
+                raise PermissionError(PERMISSION_HELP.format(port=port)) from e
+            raise
         self.ser.dtr = True
         self.ser.rts = True
         self._buf = bytearray()
