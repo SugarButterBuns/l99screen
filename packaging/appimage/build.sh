@@ -55,6 +55,7 @@ AppDir/AppRun detect || true   # no keyboard on the build machine: expect "not f
 xvfb-run -a AppDir/AppRun --selftest
 
 echo "== packing"
+chmod -R a+rX AppDir   # the Python base ships some 0700 dirs; other users must be able to read them
 curl -fsSL -o appimagetool \
   https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
 chmod +x appimagetool
