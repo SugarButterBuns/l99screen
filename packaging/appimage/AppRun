@@ -5,14 +5,15 @@
 HERE="$(dirname "$(readlink -f "$0")")"
 PY="$HERE/opt/python@PYVER@/bin/python@PYVER@"
 
-tcl="$(ls -d "$HERE"/usr/share/tcltk/tcl8* "$HERE"/usr/share/tcltk/tcl9* 2>/dev/null | head -1)"
-tk="$(ls -d "$HERE"/usr/share/tcltk/tk8* "$HERE"/usr/share/tcltk/tk9* 2>/dev/null | head -1)"
-[ -n "$tcl" ] && export TCL_LIBRARY="$tcl"
-[ -n "$tk" ] && export TK_LIBRARY="$tk" && export TKPATH="$tk"
+export TCL_LIBRARY="$HERE/@TCLDIR@"
+export TK_LIBRARY="$HERE/@TKDIR@"
+export TKPATH="$TK_LIBRARY"
 export PYTHONNOUSERSITE=1
 unset PYTHONHOME PYTHONPATH
 
 case "${1:-}" in
+  --selftest)
+    exec "$PY" -c "import tkinterdnd2, l99screen.gui; r = tkinterdnd2.TkinterDnD.Tk(); l99screen.gui.App(r); r.update(); r.destroy(); print('GUI + drag-and-drop OK')" ;;
   image|gif|detect|gui|udev-rule|-h|--help) exec "$PY" -m l99screen "$@" ;;
   *) exec "$PY" -m l99screen gui "$@" ;;
 esac

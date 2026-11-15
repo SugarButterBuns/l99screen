@@ -40,15 +40,19 @@ install -Dm644 "$ROOT/packaging/appimage/l99screen.png" AppDir/usr/share/icons/h
 ln -sf l99screen.png AppDir/.DirIcon
 # The Python AppImage ships AppRun as a symlink into usr/bin: replace the link, don't write through it.
 rm -f AppDir/AppRun
-sed "s/@PYVER@/$PYVER/g" "$ROOT/packaging/appimage/AppRun" > AppDir/AppRun
+# Locate Tcl/Tk script libraries inside the bundle and bake their relative paths into AppRun.
+TCLDIR="$(dirname "$(find AppDir -name init.tcl -path '*tcl*' | head -1)")"
+TKDIR="$(dirname "$(find AppDir -name tk.tcl | head -1)")"
+echo "tcl library: $TCLDIR"; echo "tk library:  $TKDIR"
+[ -f "$TCLDIR/init.tcl" ] && [ -f "$TKDIR/tk.tcl" ] || { echo "Tcl/Tk not found in bundle"; exit 1; }
+sed -e "s/@PYVER@/$PYVER/g" -e "s#@TCLDIR@#${TCLDIR#AppDir/}#" -e "s#@TKDIR@#${TKDIR#AppDir/}#" \
+  "$ROOT/packaging/appimage/AppRun" > AppDir/AppRun
 chmod +x AppDir/AppRun
 
 echo "== smoke tests"
 AppDir/AppRun --help >/dev/null
 AppDir/AppRun detect || true   # no keyboard on the build machine: expect "not found"
-if command -v xvfb-run >/dev/null; then
-  xvfb-run -a "$PY" -c "import tkinter, tkinterdnd2; r = tkinterdnd2.TkinterDnD.Tk(); r.destroy(); print('Tk + DnD OK')"
-fi
+xvfb-run -a AppDir/AppRun --selftest
 
 echo "== packing"
 curl -fsSL -o appimagetool \
