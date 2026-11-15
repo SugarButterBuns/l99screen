@@ -38,6 +38,8 @@ install -Dm644 "$ROOT/packaging/appimage/l99screen.desktop" AppDir/usr/share/app
 install -Dm644 "$ROOT/packaging/appimage/l99screen.png" AppDir/l99screen.png
 install -Dm644 "$ROOT/packaging/appimage/l99screen.png" AppDir/usr/share/icons/hicolor/256x256/apps/l99screen.png
 ln -sf l99screen.png AppDir/.DirIcon
+# The Python AppImage ships AppRun as a symlink into usr/bin: replace the link, don't write through it.
+rm -f AppDir/AppRun
 sed "s/@PYVER@/$PYVER/g" "$ROOT/packaging/appimage/AppRun" > AppDir/AppRun
 chmod +x AppDir/AppRun
 
